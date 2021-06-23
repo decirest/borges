@@ -9,7 +9,7 @@
 -callback store(key(), value(), storage_config()) -> ok | {error, term()}.
 -callback remove(key(), storage_config()) -> ok | {error, term()}.
 
-%-callback keys() -> {ok, key()} | {ok, []} | {error, term()}.
+%-callback keys(storage_config()) -> {ok, [key()]} | {ok, []} | {error, term()}.
 
 -export([remove/2,
          get/2,

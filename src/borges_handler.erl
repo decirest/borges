@@ -3,7 +3,7 @@
 -behaviour(gen_server).
 
 -export([start_link/1,
-         handle_event/2,
+         handle_event/3,
          remove/2,
          ensure_consistency/1,
          ensure_consistency/2]).
@@ -18,9 +18,9 @@
 
 start_link(Name) -> gen_server:start_link(?MODULE, [Name], []).
 
-handle_event(Name, Obj) ->
+handle_event(Name, Obj, OldObj) ->
     Pid = borges_spec:get_handler_pid(Name),
-    gen_server:cast(Pid, {event, Obj}).
+    gen_server:cast(Pid, {event, {Obj, OldObj}}).
 
 remove(Name, Obj) ->
     Pid = borges_spec:get_handler_pid(Name),
@@ -42,13 +42,15 @@ handle_call(Msg, _From, State) ->
     logger:notice("out of bounds call ~p", [Msg]),
     {reply, ok, State}.
 
-handle_cast({event, Obj}, #state{name = ModelName} = State) ->
+handle_cast({event, {Obj, OldObj}}, #state{name = ModelName} = State) ->
+    handle_cast({remove, OldObj}, State),
     Subsets =
         maps:values(
             borges_spec:get_subsets(ModelName)),
     Function = fun subset_store/5,
     [maybe_apply_to_subset(Function, ModelName, Obj, Subset) || Subset <- Subsets],
     {noreply, State};
+handle_cast({remove, not_found}, State) -> {noreply, State};
 handle_cast({remove, Obj}, #state{name = ModelName} = State) ->
     Subsets =
         maps:values(
@@ -86,14 +88,16 @@ maybe_apply_to_subset(F, ModelName, Obj, SubsetConfig) ->
     end.
 
 subset_store(ModelName, SubsetName, Input, Data, SubsetConfig) ->
+    {ok, OldSubset} = borges:get_subset(ModelName, SubsetName, Input),
     #{extend := ExtendFun} = SubsetConfig,
-    Obj = ExtendFun(SubsetName, Data, Input),
-    borges_adapter:store_subset(ModelName, SubsetName, Input, Obj).
+    Subset = ExtendFun(OldSubset, Data),
+    borges_adapter:store_subset(ModelName, SubsetName, Input, Subset).
 
 subset_remove(ModelName, SubsetName, Input, Data, SubsetConfig) ->
+    {ok, OldSubset} = borges:get_subset(ModelName, SubsetName, Input),
     #{reduce := ReduceFun} = SubsetConfig,
-    Obj = ReduceFun(SubsetName, Data, Input),
-    borges_adapter:store_subset(ModelName, SubsetName, Input, Obj).
+    Subset = ReduceFun(OldSubset, Data),
+    borges_adapter:store_subset(ModelName, SubsetName, Input, Subset).
 
 maybe_prep_data(Obj, #{data_prep := F}) -> F(Obj);
 maybe_prep_data(Obj, _) -> Obj.

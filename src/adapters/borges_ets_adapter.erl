@@ -1,6 +1,6 @@
 -module(borges_ets_adapter).
 
--export([name/0,
+-export([keys/1,
          store/3,
          fetch/2,
          remove/2]).
@@ -13,8 +13,6 @@
 -type key() :: term().
 -type data() :: term().
 
-name() -> borges_ets_adapter.
-
 -spec store(key(), data(), storage_adapter_config()) -> ok.
 store(Key, Data, #{storage_adapter_config := StorageAdapterConfig}) ->
     TableName = maps:get(name, StorageAdapterConfig),
@@ -26,10 +24,17 @@ fetch(Key, #{storage_adapter_config := StorageAdapterConfig}) ->
     TableName = maps:get(name, StorageAdapterConfig),
     case ets:lookup(TableName, Key) of
         [{_, Data}] -> {ok, Data};
-        _ -> {ok, []}
+        _ -> {ok, not_found}
     end.
 
 remove(Key, #{storage_adapter_config := StorageAdapterConfig}) ->
     TableName = maps:get(name, StorageAdapterConfig),
     ets:delete(TableName, Key),
     ok.
+
+keys(#{storage_adapter_config := StorageAdapterConfig}) ->
+    TableName = maps:get(name, StorageAdapterConfig),
+    Keys =
+        lists:flatten(
+            ets:match(TableName, {'$1', '_'})),
+    {ok, Keys}.

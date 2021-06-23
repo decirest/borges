@@ -1,6 +1,7 @@
 -module(borges_spec).
 
 -export([get_spec/1,
+         get_subset_spec/2,
          validate/1,
          create/2,
          delete/1,
@@ -24,6 +25,7 @@
       handler_pid => undefined | pid(),
       subsets => subset_map(),
       module => spec_module_name()}.
+% This needs to be some data structure which behaves as a set, i.e. set, map with unique keys
 -type subset_data() :: term().
 -type subset_obj_data() :: term() | [subset_data()].
 -type main_storage_data() :: term().
@@ -34,9 +36,12 @@
       is_related := fun((main_storage_data()) -> boolean()),
       data_prep := fun((main_storage_data()) -> subset_data()),
       subset_keys_fun := fun((main_storage_data()) -> [ident()]),
-      extend := fun((subset_name(), subset_data(), ident()) -> subset_obj_data()),
-      reduce := fun((subset_name(), subset_data(), ident()) -> subset_obj_data()),
+      extend := fun((subset_obj_data() | not_found, subset_data()) -> subset_obj_data()),
+      reduce := fun((subset_obj_data() | not_found, subset_data()) -> subset_obj_data()),
       storage_config := storage_config()}.
+
+      %todo: add as default with optional override?
+
 -type storage_config() ::
     #{key_fun := fun((ident()) -> key()),
       storage_adapter := atom(),
@@ -63,12 +68,35 @@ make_internal_specification_structure(Module) ->
     StorageName = Module:name(),
     Subsets = Module:subsets(),
     MainStorage = Module:main_storage(),
-    SubsetsMap = maps:from_list([{Name, Def} || #{name := Name} = Def <- Subsets]),
+%    SubsetsMap = maps:from_list([{Name, Def} || #{name := Name} = Def <- Subsets]),
+    SubsetsMap = maps:from_list(make_internal_subset_structure(Subsets)),
+
     #{name => StorageName,
       main_storage => MainStorage,
       handler_pid => undefined,
       subsets => SubsetsMap,
       module => Module}.
+
+make_internal_subset_structure([]) ->
+    [];
+make_internal_subset_structure([#{name := Name} = Subset0 | Rest]) ->
+    Extend = maps:get(extend, Subset0, fun default_extend/2),
+    Reduce = maps:get(reduce, Subset0, fun default_reduce/2),
+    Subset = Subset0#{
+        extend => Extend,
+        reduce => Reduce
+    },
+    [{Name, Subset} | make_internal_subset_structure(Rest)].
+
+default_extend(not_found, Data) ->
+    sets:from_list([Data]);
+default_extend(OldData, Data) ->
+    sets:add_element(Data, OldData).
+
+default_reduce(not_found, _Data) ->
+    sets:new();
+default_reduce(OldData, Data) ->
+    sets:del_element(Data, OldData).
 
 %%%%%%%%%%%%% ACCESS FUNCTIONS %%%%%%%%%%%%
 validate(_StorageSpec) -> ok.

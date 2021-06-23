@@ -48,13 +48,18 @@ get_subset(Name, SubsetName) ->
 
 -spec get_subset(spec_name(), subset_name(), ident()) ->
                     {ok, main_storage_data()} | {ok, []}.
-get_subset(Name, SubsetName, Id) -> borges_adapter:get_subset(Name, SubsetName, Id).
+get_subset(Name, SubsetName, Id) ->
+    case borges_spec:get_subset_spec(Name, SubsetName) of
+        not_found -> {error, subset_not_defined};
+        _ -> borges_adapter:get_subset(Name, SubsetName, Id)
+    end.
 
 -spec store(spec_name(), main_storage_data()) -> ok.
 store(Name, Term) ->
-    borges_handler:handle_event(Name, Term),
     IdentifierFun = borges_spec:get_identifier_fun(Name),
     Input = IdentifierFun(Term),
+    {ok, OldTerm} = borges_adapter:get(Name, Input),
+    borges_handler:handle_event(Name, Term, OldTerm),
     borges_adapter:store(Name, Input, Term).
 
 -spec put(spec_name(), main_storage_data()) -> ok.
